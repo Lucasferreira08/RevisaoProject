@@ -3,6 +3,8 @@
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
 #include "hardware/i2c.h"
+#include "hardware/pwm.h"
+#include "hardware/clocks.h"
 #include "ssd1306.h"
 #include "font.h"
 #include "led_matrix.h"
@@ -11,6 +13,7 @@
 #define I2C_SDA 14
 #define I2C_SCL 15
 #define endereco 0x3C
+
 #define JOYSTICK_X_PIN 26  // GPIO para eixo X
 #define JOYSTICK_Y_PIN 27  // GPIO para eixo Y
 #define JOYSTICK_PB 22 // GPIO para botão do Joystick
@@ -30,6 +33,15 @@
 #define SSD1306_HEIGHT         64
 #define SQUARE_SIZE             8      // tamanho do quadrado que representa o joystick
 
+// Configuração do pino do buzzer
+#define BUZZER_PIN 21
+
+// Configuração da frequência do buzzer (em Hz)
+#define BUZZER_FREQUENCY 100
+
+static uint pwm_slice_num;
+static uint pwm_channel;
+
 // Variáveis globais para controle de tempo e estado
 static volatile uint32_t last_time = 0; // Armazena o último tempo de interrupção
 static volatile uint a = 0; // Variável de estado que será incrementada/decrementada pelos botões
@@ -37,6 +49,45 @@ static volatile uint a = 0; // Variável de estado que será incrementada/decrem
 // Variáveis para o PIO (Programmable I/O) e state machine (máquina de estados)
 PIO pio;
 uint sm;
+
+// Função de interrupção com debouncing aprimorado
+void pwm_init_buzzer(uint pin)
+{
+    gpio_set_function(BUZZER_PIN, GPIO_FUNC_PWM);
+    pwm_slice_num = pwm_gpio_to_slice_num(BUZZER_PIN);
+    pwm_channel = pwm_gpio_to_channel(BUZZER_PIN);
+    
+    pwm_config config = pwm_get_default_config();
+    pwm_init(pwm_slice_num, &config, false); // Inicia desligado
+}
+
+int64_t buzzer_stop_alarm_callback(alarm_id_t id, void *user_data) {
+    pwm_set_enabled(pwm_slice_num, false);
+    return 0;
+}
+
+// Definição de uma função para emitir um beep com duração especificada
+void beep(int frequency) {
+    if (frequency <= 0) {
+        pwm_set_enabled(pwm_slice_num, false);
+        return;
+    }
+
+    uint32_t sys_clk = clock_get_hz(clk_sys); // Obtém clock do sistema (125 MHz padrão)
+    uint32_t div = 1;
+    uint32_t wrap;
+
+    // Calcula div e wrap para melhor resolução
+    while ((sys_clk / (div * frequency)) > 65535 && div < 256) div++;
+    wrap = (sys_clk / (div * frequency)) - 1;
+
+    pwm_set_clkdiv_int_frac(pwm_slice_num, div, 0);
+    pwm_set_wrap(pwm_slice_num, wrap);
+    pwm_set_chan_level(pwm_slice_num, pwm_channel, wrap * 0.75f); // 75% duty cycle para volume máximo
+    pwm_set_enabled(pwm_slice_num, true);
+
+    add_alarm_in_ms(50, buzzer_stop_alarm_callback, NULL, false);
+}
 
 // Função de interrupção com debouncing aprimorado
 void gpio_irq_handler(uint gpio, uint32_t events)
@@ -50,9 +101,17 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         if (gpio == BUTTON_A && a < 9) {
             a++;
         } 
+        else if (gpio == BUTTON_A && a == 9) 
+        {
+            beep(440);
+        }
         // Se o botão B foi pressionado e 'a' é maior que 0, decrementa 'a'
         else if (gpio == BUTTON_B && a > 0) {
             a--;
+        }
+        else if (gpio == BUTTON_B && a == 0) 
+        {
+            beep(440);
         }
 
         // Exibe o valor atual de 'a' no console
@@ -100,9 +159,10 @@ void pinos_config()
     gpio_set_dir(BUTTON_B, GPIO_IN);
     gpio_pull_up(BUTTON_B);
 
-    // Configura o pino do LED vermelho como saída
-    // gpio_init(OUT_PIN_RED);
-    // gpio_set_dir(OUT_PIN_RED, GPIO_OUT);
+    gpio_init(BUZZER_PIN);
+    gpio_set_dir(BUZZER_PIN, GPIO_OUT);
+    // Inicializar o PWM no pino do buzzer
+    pwm_init_buzzer(BUZZER_PIN);
 
     // Habilita a interrupção para os botões A e B na borda de descida (quando o botão é pressionado)
     gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
@@ -156,12 +216,6 @@ int main()
       adc_select_input(1);
       uint16_t adc_x = adc_read();
  
-      // --- Cálculo dos níveis PWM para os LEDs ---
-      // A ideia é que, quando o joystick estiver no centro (2048), o LED fique apagado.
-      // Quanto maior o desvio (seja para mais ou para menos), maior a intensidade.
-      uint16_t diff_x = (adc_x > ADC_CENTER) ? (adc_x - ADC_CENTER) : (ADC_CENTER - adc_x);
-      uint16_t diff_y = (adc_y > ADC_CENTER) ? (adc_y - ADC_CENTER) : (ADC_CENTER - adc_y);
-
       // --- Cálculo da posição do quadrado no display ---
       // Mapeia os valores ADC para a posição dentro da área útil do display
       uint8_t square_x = (adc_x * (SSD1306_WIDTH - SQUARE_SIZE)) / ADC_MAX;
