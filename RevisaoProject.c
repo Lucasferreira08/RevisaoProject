@@ -1,6 +1,3 @@
-// #include <stdio.h>
-// #include "pico/stdlib.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include "pico/stdlib.h"
@@ -8,6 +5,8 @@
 #include "hardware/i2c.h"
 #include "ssd1306.h"
 #include "font.h"
+#include "led_matrix.h"
+
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
@@ -15,7 +14,12 @@
 #define JOYSTICK_X_PIN 26  // GPIO para eixo X
 #define JOYSTICK_Y_PIN 27  // GPIO para eixo Y
 #define JOYSTICK_PB 22 // GPIO para botão do Joystick
-#define Botao_A 5 // GPIO para botão A
+
+// Define os pinos dos botões A e B
+#define BUTTON_A 5
+#define BUTTON_B 6
+
+#define OUT_PIN 7
 
 // Definições ADC
 #define ADC_CENTER           2048      // valor central (joystick solto)
@@ -26,9 +30,41 @@
 #define SSD1306_HEIGHT         64
 #define SQUARE_SIZE             8      // tamanho do quadrado que representa o joystick
 
-#define ADC_DEADZONE 200
+// Variáveis globais para controle de tempo e estado
+static volatile uint32_t last_time = 0; // Armazena o último tempo de interrupção
+static volatile uint a = 0; // Variável de estado que será incrementada/decrementada pelos botões
 
-// volatile int border_style = 0;
+// Variáveis para o PIO (Programmable I/O) e state machine (máquina de estados)
+PIO pio;
+uint sm;
+
+// Função de interrupção com debouncing aprimorado
+void gpio_irq_handler(uint gpio, uint32_t events)
+{
+    uint32_t current_time = to_us_since_boot(get_absolute_time()); // Obtém o tempo atual em microssegundos
+
+    // Verifica se passaram pelo menos 250ms desde a última interrupção (debouncing)
+    if (current_time - last_time > 250000) // 250 ms para evitar pulos
+    {
+        // Se o botão A foi pressionado e 'a' é menor que 9, incrementa 'a'
+        if (gpio == BUTTON_A && a < 9) {
+            a++;
+        } 
+        // Se o botão B foi pressionado e 'a' é maior que 0, decrementa 'a'
+        else if (gpio == BUTTON_B && a > 0) {
+            a--;
+        }
+
+        // Exibe o valor atual de 'a' no console
+        printf("A = %d\n", a);
+
+        // Atualiza o último tempo de interrupção
+        last_time = current_time;
+
+        // Chama a função de animação principal com o valor atual de 'a'
+        main_animacao(a, pio, sm);
+    }
+}
 
 void display_init(ssd1306_t *ssd)
 {
@@ -49,6 +85,30 @@ void display_init(ssd1306_t *ssd)
   ssd1306_send_data(ssd);
 }
 
+// Função para configurar os pinos
+void pinos_config() 
+{
+    stdio_init_all(); // Inicializa a comunicação serial (para printf)
+
+    // Configura o pino do botão A como entrada com pull-up
+    gpio_init(BUTTON_A);
+    gpio_set_dir(BUTTON_A, GPIO_IN);
+    gpio_pull_up(BUTTON_A);
+
+    // Configura o pino do botão B como entrada com pull-up
+    gpio_init(BUTTON_B);
+    gpio_set_dir(BUTTON_B, GPIO_IN);
+    gpio_pull_up(BUTTON_B);
+
+    // Configura o pino do LED vermelho como saída
+    // gpio_init(OUT_PIN_RED);
+    // gpio_set_dir(OUT_PIN_RED, GPIO_OUT);
+
+    // Habilita a interrupção para os botões A e B na borda de descida (quando o botão é pressionado)
+    gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+    gpio_set_irq_enabled_with_callback(BUTTON_B, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+}
+
 void adc_init_config() 
 {
   adc_init();
@@ -56,41 +116,38 @@ void adc_init_config()
   adc_gpio_init(JOYSTICK_Y_PIN);  
 }
 
-//Trecho para modo BOOTSEL com botão B
-// #include "pico/bootrom.h"
-// #define botaoB 6
-// void gpio_irq_handler(uint gpio, uint32_t events)
-// {
-//   reset_usb_boot(0, 0);
-// }
+// Função para configurar o PIO (Programmable I/O)
+uint pio_config(PIO pio) 
+{
+    set_sys_clock_khz(128000, false); // Configura o clock do sistema para 128 MHz
+
+    // Adiciona o programa PIO para controle da matriz de LEDs
+    uint offset = pio_add_program(pio, &pio_matrix_program);
+
+    // Obtém uma state machine (máquina de estados) não utilizada
+    uint sm = pio_claim_unused_sm(pio, true);
+
+    // Inicializa o programa PIO na state machine com o pino de saída definido
+    pio_matrix_program_init(pio, sm, offset, OUT_PIN);
+
+    return sm; // Retorna a state machine configurada
+}
 
 int main()
 {
+  pio = pio0;
+
   ssd1306_t ssd; // Inicializa a estrutura do display
-
-  // // Para ser utilizado o modo BOOTSEL com botão B
-  // gpio_init(botaoB);
-  // gpio_set_dir(botaoB, GPIO_IN);
-  // gpio_pull_up(botaoB);
-  // gpio_set_irq_enabled_with_callback(botaoB, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
-  // //Aqui termina o trecho para modo BOOTSEL com botão B
-
-  // gpio_init(JOYSTICK_PB);
-  // gpio_set_dir(JOYSTICK_PB, GPIO_IN);
-  // gpio_pull_up(JOYSTICK_PB); 
-
-  // gpio_init(Botao_A);
-  // gpio_set_dir(Botao_A, GPIO_IN);
-  // gpio_pull_up(Botao_A);
 
   display_init(&ssd);
 
   adc_init_config();
 
-  // uint16_t adc_value_x;
-  // uint16_t adc_value_y;
-  
-  bool cor = true;
+  pinos_config();
+  sm = pio_config(pio);
+
+  main_animacao(a, pio, sm);
+
   while (true)
   {
       adc_select_input(0);
@@ -105,25 +162,6 @@ int main()
       uint16_t diff_x = (adc_x > ADC_CENTER) ? (adc_x - ADC_CENTER) : (ADC_CENTER - adc_x);
       uint16_t diff_y = (adc_y > ADC_CENTER) ? (adc_y - ADC_CENTER) : (ADC_CENTER - adc_y);
 
-      // Aplica dead zone e calcula duty cycle
-      // uint32_t duty_red = 0, duty_blue = 0;
-      // if (diff_x > ADC_DEADZONE) {
-      //     duty_red = ((diff_x - ADC_DEADZONE) * 4095) / (ADC_CENTER - ADC_DEADZONE);
-      // }
-      // if (diff_y > ADC_DEADZONE) {
-      //     duty_blue = ((diff_y - ADC_DEADZONE) * 4095) / (ADC_CENTER - ADC_DEADZONE);
-      // }
- 
-      // if (pwm_enabled) {
-      //     pwm_set_gpio_level(PIN_LED_RED, duty_red);
-      //     pwm_set_gpio_level(PIN_LED_BLUE, duty_blue);
-      // }
-      // else {
-      //     // Se os PWM estiverem desativados, força o valor 0
-      //     pwm_set_gpio_level(PIN_LED_RED, 0);
-      //     pwm_set_gpio_level(PIN_LED_BLUE, 0);
-      // }
- 
       // --- Cálculo da posição do quadrado no display ---
       // Mapeia os valores ADC para a posição dentro da área útil do display
       uint8_t square_x = (adc_x * (SSD1306_WIDTH - SQUARE_SIZE)) / ADC_MAX;
@@ -133,16 +171,6 @@ int main()
       // Limpa o buffer do display
       ssd1306_fill(&ssd, false);
 
-      // Desenha a borda de acordo com o estilo atual (alternado pelo botão do joystick)
-      // if (border_style == 0) {
-      // // Estilo 0: borda completa (retângulo vazio)
-      //     ssd1306_rect(&ssd, 0, 0, SSD1306_WIDTH, SSD1306_HEIGHT, 1, 0);
-      // }
-      // else if (border_style == 1) {
-      //     ssd1306_rect(&ssd, 0, 0, SSD1306_WIDTH, SSD1306_HEIGHT, 1, 0);
-      //     ssd1306_rect(&ssd, 1, 1, SSD1306_WIDTH-2, SSD1306_HEIGHT-2, 1, 0);
-      //     ssd1306_rect(&ssd, 2, 2, SSD1306_WIDTH-4, SSD1306_HEIGHT-4, 1, 0);
-      // }
       ssd1306_rect(&ssd, 0, 0, SSD1306_WIDTH, SSD1306_HEIGHT, 1, 0);
 
       // Desenha o quadrado móvel representando a posição do joystick
