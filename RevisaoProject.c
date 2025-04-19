@@ -11,6 +11,11 @@
 #define JOYSTICK_Y_PIN 27  // GPIO para eixo Y
 #define JOYSTICK_PB 22 // GPIO para botão do Joystick
 
+#define PIN_LED_BLUE         12    // LED Azul (PWM) – controlado pelo eixo Y do joystick
+#define PIN_LED_RED          13    // LED Vermelho (PWM) – controlado pelo eixo X do joystick
+
+#define ADC_DEADZONE 200           // Dead zone around joystick center (adjust as needed)
+
 // Define os pinos dos botões A e B
 #define BUTTON_A 5
 #define BUTTON_B 6
@@ -101,30 +106,49 @@ void pinos_config()
     // Inicializar o PWM no pino do buzzer
     pwm_init_buzzer(BUZZER_PIN);
 
+    // LED Azul (PWM)
+    gpio_init(PIN_LED_BLUE);
+    gpio_set_dir(PIN_LED_BLUE, GPIO_OUT);
+    // LED Vermelho (PWM)
+    gpio_init(PIN_LED_RED);
+    gpio_set_dir(PIN_LED_RED, GPIO_OUT);
+
     // Habilita a interrupção para os botões A e B na borda de descida (quando o botão é pressionado)
     gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled_with_callback(BUTTON_B, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled_with_callback(JOYSTICK_PB, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+
+    adc_init();
+    adc_gpio_init(JOYSTICK_X_PIN);
+    adc_gpio_init(JOYSTICK_Y_PIN);
 }
 
-void adc_init_config() 
-{
-  adc_init();
-  adc_gpio_init(JOYSTICK_X_PIN);
-  adc_gpio_init(JOYSTICK_Y_PIN);  
-}
+void pwm_main_config() 
+ {
+     uint slice_blue = pwm_gpio_to_slice_num(PIN_LED_BLUE);
+     uint channel_blue = pwm_gpio_to_channel(PIN_LED_BLUE);
+     pwm_set_wrap(slice_blue, 4095);  // define valor de wrap (PERÍODO PWM)
+     pwm_set_chan_level(slice_blue, channel_blue, 0);  // inicia com brilho 0
+     pwm_set_enabled(slice_blue, true);
+     gpio_set_function(PIN_LED_BLUE, GPIO_FUNC_PWM);
+ 
+     uint slice_red = pwm_gpio_to_slice_num(PIN_LED_RED);
+     uint channel_red = pwm_gpio_to_channel(PIN_LED_RED);
+     pwm_set_wrap(slice_red, 4095);
+     pwm_set_chan_level(slice_red, channel_red, 0);
+     pwm_set_enabled(slice_red, true);
+     gpio_set_function(PIN_LED_RED, GPIO_FUNC_PWM);
+ }
 
 int main()
 {
   pio = pio0;
-
   ssd1306_t ssd; // Inicializa a estrutura do display
 
-  display_init(&ssd);
-
-  adc_init_config();
-
   pinos_config();
+  display_init(&ssd);
+  pwm_main_config();
+
   sm = pio_config(pio);
 
   main_animacao(a, pio, sm);
@@ -136,6 +160,24 @@ int main()
  
       adc_select_input(1);
       uint16_t adc_x = adc_read();
+
+      // --- Cálculo dos níveis PWM para os LEDs ---
+      // A ideia é que, quando o joystick estiver no centro (2048), o LED fique apagado.
+      // Quanto maior o desvio (seja para mais ou para menos), maior a intensidade.
+      uint16_t diff_x = (adc_x > ADC_CENTER) ? (adc_x - ADC_CENTER) : (ADC_CENTER - adc_x);
+      uint16_t diff_y = (adc_y > ADC_CENTER) ? (adc_y - ADC_CENTER) : (ADC_CENTER - adc_y);
+
+      // Aplica dead zone e calcula duty cycle
+      uint32_t duty_red = 0, duty_blue = 0;
+      if (diff_x > ADC_DEADZONE) {
+            duty_red = ((diff_x - ADC_DEADZONE) * 4095) / (ADC_CENTER - ADC_DEADZONE);
+      }
+      if (diff_y > ADC_DEADZONE) {
+            duty_blue = ((diff_y - ADC_DEADZONE) * 4095) / (ADC_CENTER - ADC_DEADZONE);
+      }
+
+      pwm_set_gpio_level(PIN_LED_RED, duty_red);
+      pwm_set_gpio_level(PIN_LED_BLUE, duty_blue);
  
       // --- Cálculo da posição do quadrado no display ---
       // Mapeia os valores ADC para a posição dentro da área útil do display
