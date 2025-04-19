@@ -58,6 +58,12 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         {
             beep(440);
         }
+        else if (gpio == JOYSTICK_PB) 
+        {
+            main_animacao(-1, pio, sm);
+            last_time = current_time;
+            return;    
+        }
 
         // Exibe o valor atual de 'a' no console
         printf("A = %d\n", a);
@@ -85,6 +91,11 @@ void pinos_config()
     gpio_set_dir(BUTTON_B, GPIO_IN);
     gpio_pull_up(BUTTON_B);
 
+    // Configura o pino do botão B como entrada com pull-up
+    gpio_init(JOYSTICK_PB);
+    gpio_set_dir(JOYSTICK_PB, GPIO_IN);
+    gpio_pull_up(JOYSTICK_PB);
+
     gpio_init(BUZZER_PIN);
     gpio_set_dir(BUZZER_PIN, GPIO_OUT);
     // Inicializar o PWM no pino do buzzer
@@ -93,6 +104,7 @@ void pinos_config()
     // Habilita a interrupção para os botões A e B na borda de descida (quando o botão é pressionado)
     gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled_with_callback(BUTTON_B, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+    gpio_set_irq_enabled_with_callback(JOYSTICK_PB, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
 }
 
 void adc_init_config() 

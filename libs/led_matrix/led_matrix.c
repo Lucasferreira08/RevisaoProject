@@ -68,6 +68,12 @@ double desenho9[25] =   {0.0, 1.0, 1.0, 1.0, 0.0,
                          0.0, 1.0, 0.0, 0.0, 0.0,
                          0.0, 1.0, 1.0, 1.0, 0.0};
 
+double desenho10[25] =   {0.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0, 0.0, 0.0, 
+                         0.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0, 0.0, 0.0,
+                         0.0, 0.0, 0.0, 0.0, 0.0};
+
 // Rotina para definir a intensidade das cores do LED (RGB)
 uint32_t matrix_rgb(double b, double r, double g)
 {
@@ -124,6 +130,9 @@ void main_animacao(uint num, PIO pio, uint sm)
             break;
         case 9:
             desenho_pio(desenho9, valor_led, pio, sm, r, g, b);
+            break;
+        default:
+            desenho_pio(desenho10, valor_led, pio, sm, r, g, b);
             break;
     }
 }
