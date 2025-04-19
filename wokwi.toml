@@ -1,4 +1,0 @@
-[wokwi]
-version = 1
-firmware = 'build/RevisaoProject.uf2'
-elf = 'build/RevisaoProject.elf'

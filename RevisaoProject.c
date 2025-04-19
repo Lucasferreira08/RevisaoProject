@@ -67,11 +67,12 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         {
             main_animacao(-1, pio, sm);
             last_time = current_time;
+            printf("Matriz de led desligada.\n");
             return;    
         }
 
         // Exibe o valor atual de 'a' no console
-        printf("A = %d\n", a);
+        printf("Valor exibido na matriz de led: %d\n", a);
 
         // Atualiza o último tempo de interrupção
         last_time = current_time;
