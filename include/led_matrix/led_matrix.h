@@ -21,4 +21,6 @@ void desenho_pio(double *desenho, uint32_t valor_led, PIO pio, uint sm, double r
 // Main loop to monitor keypad and run animations
 void main_animacao(uint num, PIO pio, uint sm);
 
+uint pio_config(PIO pio); 
+
 #endif // LED_ANIMATION_H

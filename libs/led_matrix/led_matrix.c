@@ -127,3 +127,20 @@ void main_animacao(uint num, PIO pio, uint sm)
             break;
     }
 }
+
+// Função para configurar o PIO (Programmable I/O)
+uint pio_config(PIO pio) 
+{
+    set_sys_clock_khz(128000, false); // Configura o clock do sistema para 128 MHz
+
+    // Adiciona o programa PIO para controle da matriz de LEDs
+    uint offset = pio_add_program(pio, &pio_matrix_program);
+
+    // Obtém uma state machine (máquina de estados) não utilizada
+    uint sm = pio_claim_unused_sm(pio, true);
+
+    // Inicializa o programa PIO na state machine com o pino de saída definido
+    pio_matrix_program_init(pio, sm, offset, OUT_PIN);
+
+    return sm; // Retorna a state machine configurada
+}

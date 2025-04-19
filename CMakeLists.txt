@@ -41,7 +41,8 @@ pico_sdk_init()
 add_executable(${PROJECT_NAME} 
         RevisaoProject.c 
         libs/display/ssd1306.c
-        libs/led_matrix/led_matrix.c)
+        libs/led_matrix/led_matrix.c
+        libs/buzzer/buzzer.c)
 
 # Adiciona o arquivo PIO
 pico_generate_pio_header(${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/pio_matrix.pio)
@@ -54,7 +55,8 @@ pico_enable_stdio_usb(${PROJECT_NAME} 1)
 target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/include/display
-        ${CMAKE_CURRENT_LIST_DIR}/include/led_matrix)
+        ${CMAKE_CURRENT_LIST_DIR}/include/led_matrix
+        ${CMAKE_CURRENT_LIST_DIR}/include/buzzer)
 
 # Add the standard library to the build
 target_link_libraries(${PROJECT_NAME}

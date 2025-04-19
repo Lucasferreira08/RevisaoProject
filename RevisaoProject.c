@@ -2,17 +2,10 @@
 #include <stdlib.h>
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
-#include "hardware/i2c.h"
-#include "hardware/pwm.h"
-#include "hardware/clocks.h"
+#include "buzzer.h"
 #include "ssd1306.h"
 #include "font.h"
 #include "led_matrix.h"
-
-#define I2C_PORT i2c1
-#define I2C_SDA 14
-#define I2C_SCL 15
-#define endereco 0x3C
 
 #define JOYSTICK_X_PIN 26  // GPIO para eixo X
 #define JOYSTICK_Y_PIN 27  // GPIO para eixo Y
@@ -33,15 +26,6 @@
 #define SSD1306_HEIGHT         64
 #define SQUARE_SIZE             8      // tamanho do quadrado que representa o joystick
 
-// Configuração do pino do buzzer
-#define BUZZER_PIN 21
-
-// Configuração da frequência do buzzer (em Hz)
-#define BUZZER_FREQUENCY 100
-
-static uint pwm_slice_num;
-static uint pwm_channel;
-
 // Variáveis globais para controle de tempo e estado
 static volatile uint32_t last_time = 0; // Armazena o último tempo de interrupção
 static volatile uint a = 0; // Variável de estado que será incrementada/decrementada pelos botões
@@ -49,45 +33,6 @@ static volatile uint a = 0; // Variável de estado que será incrementada/decrem
 // Variáveis para o PIO (Programmable I/O) e state machine (máquina de estados)
 PIO pio;
 uint sm;
-
-// Função de interrupção com debouncing aprimorado
-void pwm_init_buzzer(uint pin)
-{
-    gpio_set_function(BUZZER_PIN, GPIO_FUNC_PWM);
-    pwm_slice_num = pwm_gpio_to_slice_num(BUZZER_PIN);
-    pwm_channel = pwm_gpio_to_channel(BUZZER_PIN);
-    
-    pwm_config config = pwm_get_default_config();
-    pwm_init(pwm_slice_num, &config, false); // Inicia desligado
-}
-
-int64_t buzzer_stop_alarm_callback(alarm_id_t id, void *user_data) {
-    pwm_set_enabled(pwm_slice_num, false);
-    return 0;
-}
-
-// Definição de uma função para emitir um beep com duração especificada
-void beep(int frequency) {
-    if (frequency <= 0) {
-        pwm_set_enabled(pwm_slice_num, false);
-        return;
-    }
-
-    uint32_t sys_clk = clock_get_hz(clk_sys); // Obtém clock do sistema (125 MHz padrão)
-    uint32_t div = 1;
-    uint32_t wrap;
-
-    // Calcula div e wrap para melhor resolução
-    while ((sys_clk / (div * frequency)) > 65535 && div < 256) div++;
-    wrap = (sys_clk / (div * frequency)) - 1;
-
-    pwm_set_clkdiv_int_frac(pwm_slice_num, div, 0);
-    pwm_set_wrap(pwm_slice_num, wrap);
-    pwm_set_chan_level(pwm_slice_num, pwm_channel, wrap * 0.75f); // 75% duty cycle para volume máximo
-    pwm_set_enabled(pwm_slice_num, true);
-
-    add_alarm_in_ms(50, buzzer_stop_alarm_callback, NULL, false);
-}
 
 // Função de interrupção com debouncing aprimorado
 void gpio_irq_handler(uint gpio, uint32_t events)
@@ -125,25 +70,6 @@ void gpio_irq_handler(uint gpio, uint32_t events)
     }
 }
 
-void display_init(ssd1306_t *ssd)
-{
-  // I2C Initialisation. Using it at 400Khz.
-  i2c_init(I2C_PORT, 400 * 1000);
-
-  gpio_set_function(I2C_SDA, GPIO_FUNC_I2C); // Set the GPIO pin function to I2C
-  gpio_set_function(I2C_SCL, GPIO_FUNC_I2C); // Set the GPIO pin function to I2C
-  gpio_pull_up(I2C_SDA); // Pull up the data line
-  gpio_pull_up(I2C_SCL); // Pull up the clock line
-
-  ssd1306_init(ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT); // Inicializa o display
-  ssd1306_config(ssd); // Configura o display
-  ssd1306_send_data(ssd); // Envia os dados para o display
-
-  // Limpa o display. O display inicia com todos os pixels apagados.
-  ssd1306_fill(ssd, false);
-  ssd1306_send_data(ssd);
-}
-
 // Função para configurar os pinos
 void pinos_config() 
 {
@@ -174,23 +100,6 @@ void adc_init_config()
   adc_init();
   adc_gpio_init(JOYSTICK_X_PIN);
   adc_gpio_init(JOYSTICK_Y_PIN);  
-}
-
-// Função para configurar o PIO (Programmable I/O)
-uint pio_config(PIO pio) 
-{
-    set_sys_clock_khz(128000, false); // Configura o clock do sistema para 128 MHz
-
-    // Adiciona o programa PIO para controle da matriz de LEDs
-    uint offset = pio_add_program(pio, &pio_matrix_program);
-
-    // Obtém uma state machine (máquina de estados) não utilizada
-    uint sm = pio_claim_unused_sm(pio, true);
-
-    // Inicializa o programa PIO na state machine com o pino de saída definido
-    pio_matrix_program_init(pio, sm, offset, OUT_PIN);
-
-    return sm; // Retorna a state machine configurada
 }
 
 int main()
