@@ -8,5 +8,5 @@
 static uint pwm_slice_num;
 static uint pwm_channel;
 
-void pwm_init_buzzer(uint pin);
+void pwm_init_buzzer();
 void beep(int frequency);

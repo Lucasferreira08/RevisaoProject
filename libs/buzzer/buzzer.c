@@ -1,7 +1,8 @@
 #include "buzzer.h"
 
+
 // Função de interrupção com debouncing aprimorado
-void pwm_init_buzzer(uint pin)
+void pwm_init_buzzer()
 {
     gpio_set_function(BUZZER_PIN, GPIO_FUNC_PWM);
     pwm_slice_num = pwm_gpio_to_slice_num(BUZZER_PIN);
@@ -12,6 +13,7 @@ void pwm_init_buzzer(uint pin)
 }
 
 int64_t buzzer_stop_alarm_callback(alarm_id_t id, void *user_data) {
+    pwm_set_chan_level(pwm_slice_num, pwm_channel, 0);
     pwm_set_enabled(pwm_slice_num, false);
     return 0;
 }

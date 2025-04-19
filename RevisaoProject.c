@@ -149,6 +149,7 @@ int main()
   pinos_config();
   display_init(&ssd);
   pwm_main_config();
+  pwm_init_buzzer();
 
   sm = pio_config(pio);
 
