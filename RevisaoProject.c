@@ -20,8 +20,6 @@
 #define BUTTON_A 5
 #define BUTTON_B 6
 
-#define OUT_PIN 7
-
 // Definições ADC
 #define ADC_CENTER           2048      // valor central (joystick solto)
 #define ADC_MAX              4095      // resolução 12 bits (0-4095)
@@ -53,7 +51,7 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         } 
         else if (gpio == BUTTON_A && a == 9) 
         {
-            beep(440);
+            beep();
         }
         // Se o botão B foi pressionado e 'a' é maior que 0, decrementa 'a'
         else if (gpio == BUTTON_B && a > 0) {
@@ -61,7 +59,7 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         }
         else if (gpio == BUTTON_B && a == 0) 
         {
-            beep(440);
+            beep();
         }
         else if (gpio == JOYSTICK_PB) 
         {
